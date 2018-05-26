@@ -81,7 +81,7 @@ contract MetaChannel {
         // Make sure one of the parties has signed this subchannel update
         require(_hasOneSig(msg.sender));
 
-        require(_getSequence(_forceState) > subChannels[_channelID].subSequence);
+        require(_getSequence(_forceState) == subChannels[_channelID].subSequence);
 
         // this subchannel must have an agreement to allow force pushing state
         require(_allowForce(subChannels[_channelID].subState) == 1);
