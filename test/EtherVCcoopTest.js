@@ -55,8 +55,11 @@ let s0sigI_AI
 let s0sigB_BI
 let s0sigI_BI
 
-let s1sigA
-let s1sigB
+let s1sigA_AI
+let s1sigI_AI
+let s1sigB_BI
+let s1sigI_BI
+
 let s2sigA
 let s2sigB
 let s3sigA
@@ -190,11 +193,11 @@ contract('Test Virtual Channel Payments Hub', function(accounts) {
     metachannelCTFsig_BI_I = await web3.eth.sign(partyI, metachannelCTFaddress_BI)
   })
 
-  it("deploy Alice and Ingrid MultiSig", async () => {
+  it("deploy Bob and Ingrid MultiSig", async () => {
     msig_BI = await MultiSig.new(metachannelCTFaddress_BI, reg.address)
   })
 
-  it("generate ether agreement state AI", async () => {
+  it("generate ether agreement state BI", async () => {
     var inputs = []
     inputs.push(0) // is close
     inputs.push(0) // sequence
@@ -221,7 +224,7 @@ contract('Test Virtual Channel Payments Hub', function(accounts) {
     
   })
 
-  it("Ingrid signs state and joins msig agreement", async () => {
+  it("Ingrid signs state and joins msig agreement with party B", async () => {
     s0sigI_BI = await web3.eth.sign(partyI, web3.sha3(s0marshall_BI, {encoding: 'hex'}))
     var r = s0sigI_BI.substr(0,66)
     var s = "0x" + s0sigI_BI.substr(66,64)
@@ -233,7 +236,7 @@ contract('Test Virtual Channel Payments Hub', function(accounts) {
   })
 
   it("generate virtual payment channel state AI", async () => {
-    ethChannelID = web3.sha3(Math.random())
+    ethChannelID = web3.sha3('randomsalt2')
     // Since channels are now library logic, we can resuse deploys between channels
     // We probably don't need to counterfactually instantiate a lib for every channel
     var subchannelInputs = []
@@ -248,9 +251,10 @@ contract('Test Virtual Channel Payments Hub', function(accounts) {
     subchannelInputs.push('0x0') // subchannel tx roothash
     subchannelInputs.push(partyA) // partyA in the subchannel
     subchannelInputs.push(partyB) // partyB in the subchannel
-    subchannelInputs.push(partyI) // partyB in the subchannel
+    subchannelInputs.push(partyI) // Ingrid bond in the subchannel
     subchannelInputs.push(web3.toWei(5, 'ether')) // balance of party A in subchannel (ether)
-    subchannelInputs.push(web3.toWei(5, 'ether')) // balance of party I in subchannel (ether)
+    subchannelInputs.push(web3.toWei(10, 'ether')) // balance of party I in subchannel (ether)
+    subchannelInputs.push(web3.toWei(5, 'ether')) // bond from ingrid
 
     ss0_AI = subchannelInputs
     ss0marshall_AI = Utils.marshallState(subchannelInputs)
@@ -272,17 +276,73 @@ contract('Test Virtual Channel Payments Hub', function(accounts) {
     inputs.push(partyI) // partyI address
     inputs.push(metachannelCTFaddress_AI) // counterfactual metachannel address
     inputs.push(subchannelRootHash_AI) // sub-channel root hash
-    inputs.push(web3.toWei(5, 'ether')) // balance in ether partyA
-    inputs.push(web3.toWei(5, 'ether')) // balance in ether partyB
+    inputs.push(web3.toWei(10, 'ether')) // balance in ether partyA
+    inputs.push(web3.toWei(20, 'ether')) // balance in ether partyB
 
     s1_AI = inputs
     s1marshall_AI = Utils.marshallState(inputs)
   })
 
-  // it("both parties sign state: s1", async () => {
-  //   s1sigA = await web3.eth.sign(partyA, web3.sha3(s1marshall, {encoding: 'hex'}))
-  //   s1sigB = await web3.eth.sign(partyB, web3.sha3(s1marshall, {encoding: 'hex'}))
-  // })
+  it("Alice signs state: s1... Ingrid waiting to receive bobs s1 state sig on his channel", async () => {
+    s1sigA_AI = await web3.eth.sign(partyA, web3.sha3(s1marshall_AI, {encoding: 'hex'}))
+  })
+
+  it("generate virtual payment channel state BI", async () => {
+    ethChannelID = web3.sha3('randomsalt1')
+    // Since channels are now library logic, we can resuse deploys between channels
+    // We probably don't need to counterfactually instantiate a lib for every channel
+    var subchannelInputs = []
+    subchannelInputs.push(0) // is close
+    subchannelInputs.push(1) // is force push channel
+    subchannelInputs.push(0) // subchannel sequence
+    subchannelInputs.push(0) // timeout length ms
+    subchannelInputs.push(virtualchanneladdress) // ether payment interpreter library address
+    subchannelInputs.push(ethChannelID) // ID of subchannel
+    subchannelInputs.push(metachannelCTFaddress_AI) // counterfactual metachannel address
+    subchannelInputs.push(reg.address) // CTF registry address
+    subchannelInputs.push('0x0') // subchannel tx roothash
+    subchannelInputs.push(partyA) // partyA in the subchannel
+    subchannelInputs.push(partyB) // partyB in the subchannel
+    subchannelInputs.push(partyI) // Ingrid bond in the subchannel
+    subchannelInputs.push(web3.toWei(5, 'ether')) // balance of party A in subchannel (ether)
+    subchannelInputs.push(web3.toWei(10, 'ether')) // balance of party B in subchannel (ether)
+    subchannelInputs.push(web3.toWei(10, 'ether')) // bond of ingrid (ether)
+
+    ss0_BI = subchannelInputs
+    ss0marshall_BI = Utils.marshallState(subchannelInputs)
+    
+    var hash = web3.sha3(ss0marshall_BI, {encoding: 'hex'})
+    var buf = Utils.hexToBuffer(hash)
+    var elems = []
+    elems.push(buf)
+    var merkle = new MerkleTree(elems)
+
+    subchannelRootHash_BI = Utils.bufferToHex(merkle.getRoot())
+
+    //console.log(merkle.root())
+
+    var inputs = []
+    inputs.push(0) // is close
+    inputs.push(1) // sequence
+    inputs.push(partyA) // partyA address
+    inputs.push(partyI) // partyI address
+    inputs.push(metachannelCTFaddress_BI) // counterfactual metachannel address
+    inputs.push(subchannelRootHash_BI) // sub-channel root hash
+    inputs.push(web3.toWei(10, 'ether')) // balance in ether partyA
+    inputs.push(web3.toWei(20, 'ether')) // balance in ether partyB
+
+    s1_BI = inputs
+    s1marshall_BI = Utils.marshallState(inputs)
+  })
+
+  it("Bob signs state: s1... Ingrid may now sign respones to VC open state", async () => {
+    s1sigB_BI = await web3.eth.sign(partyB, web3.sha3(s1marshall_BI, {encoding: 'hex'}))
+  })
+
+  it("Ingrid signs both open VC strings", async () => {
+    s1sigI_BI = await web3.eth.sign(partyB, web3.sha3(s1marshall_BI, {encoding: 'hex'}))
+    s1sigI_AI = await web3.eth.sign(partyB, web3.sha3(s1marshall_AI, {encoding: 'hex'}))
+  })
 
   // it("generate ether channel payment", async () => {
   //   var subchannelInputs = []
